@@ -93,6 +93,9 @@ public class AgentController {
 	private Agent agentOne;
 	private Agent agentTwo;
 
+	private static int depthsSearched;
+	private static int nodesExamined;
+
 	public AgentController(Othello othello, Agent move) {
 		this.othello = othello;
 		this.agentOne = move;
@@ -250,6 +253,198 @@ public class AgentController {
 		return new MoveWrapper(randomMove);
 	}
 
+	private static void resetTracking() {
+		depthsSearched = 0;
+		nodesExamined = 0;
+	}
+
+	/**
+	 * Retrieves the number of depths searched in the most recent calculation.
+	 * @return the maximum depth reached
+	 */
+	public static int getDepthsSearched() {
+		return depthsSearched;
+	}
+
+	/**
+	 * Retrieves the number of nodes examined in the most recent calculation.
+	 * @return the total number of nodes examined
+	 */
+	public static int getNodesExamined() {
+		return nodesExamined;
+	}
+
+
+	public static MoveWrapper findBestMoveAlphaBeta(
+			GameBoardState currentState,
+			PlayerTurn turn,
+			int depth,
+			int alpha,
+			int beta,
+			boolean isMaximizingPlayer,
+			long startingTime,
+			int timeLimit
+	) {
+		// Reset tracking variables
+		resetTracking();
+
+		// Start the Alpha-Beta search
+		MoveWrapper bestMove = alphaBetaRecursive(
+				currentState,
+				turn,
+				depth,
+				alpha,
+				beta,
+				isMaximizingPlayer,
+				startingTime,
+				timeLimit
+		);
+
+		// Print tracking information after the search
+		System.out.println("Depths searched: " + depthsSearched);
+		System.out.println("Nodes examined: " + nodesExamined);
+
+		return bestMove;
+	}
+
+
+
+	private static MoveWrapper alphaBetaRecursive(
+			GameBoardState currentState,
+			PlayerTurn turn,
+			int depth,
+			int alpha,
+			int beta,
+			boolean isMaximizingPlayer,
+			long startingTime,
+			int timeLimit
+	) {
+		nodesExamined++;
+		depthsSearched = Math.max(depthsSearched, depth);
+
+		if (depth == 0 || GameTreeUtility.timeLimitExceeded(startingTime, timeLimit)) {
+			int heuristicScore = heuristicEvaluation(currentState, turn);
+			return new MoveWrapper(null, heuristicScore);
+		}
+
+		List<ObjectiveWrapper> agentMoves = getAvailableMoves(currentState, turn);
+
+		if (agentMoves.isEmpty()) {
+			if (GameTreeUtility.isTerminal(currentState, turn)) {
+				int terminalScore = getTerminalEvaluation(currentState);
+				return new MoveWrapper(null, terminalScore);
+			}
+
+			return alphaBetaRecursive(
+					currentState,
+					GameTreeUtility.getCounterPlayer(turn),
+					depth - 1,
+					alpha,
+					beta,
+					!isMaximizingPlayer,
+					startingTime,
+					timeLimit
+			);
+		}
+
+		MoveWrapper bestMove = null;
+
+		if (isMaximizingPlayer) {
+			int maxEval = Integer.MIN_VALUE;
+
+			for (ObjectiveWrapper move : agentMoves) {
+				GameBoardState newState = GameTreeUtility.createChildState(currentState, currentState, move);
+
+				MoveWrapper evaluation = alphaBetaRecursive(
+						newState,
+						GameTreeUtility.getCounterPlayer(turn),
+						depth - 1,
+						alpha,
+						beta,
+						false,
+						startingTime,
+						timeLimit
+				);
+
+				if (evaluation.getMoveReward() > maxEval) {
+					maxEval = evaluation.getMoveReward();
+					bestMove = new MoveWrapper(move, maxEval);
+				}
+
+				alpha = Math.max(alpha, maxEval);
+				if (beta <= alpha) break;
+			}
+		} else {
+			int minEval = Integer.MAX_VALUE;
+
+			for (ObjectiveWrapper move : agentMoves) {
+				GameBoardState newState = GameTreeUtility.createChildState(currentState, currentState, move);
+
+				MoveWrapper evaluation = alphaBetaRecursive(
+						newState,
+						GameTreeUtility.getCounterPlayer(turn),
+						depth - 1,
+						alpha,
+						beta,
+						true,
+						startingTime,
+						timeLimit
+				);
+
+				if (evaluation.getMoveReward() < minEval) {
+					minEval = evaluation.getMoveReward();
+					bestMove = new MoveWrapper(move, minEval);
+				}
+
+				beta = Math.min(beta, minEval);
+				if (beta <= alpha) break;
+			}
+		}
+
+		return bestMove != null ? bestMove : new MoveWrapper(null, Integer.MIN_VALUE);
+	}
+
+
+	/**
+	 * Heuristic evaluation function to estimate the utility of a non-leaf node.
+	 * This implementation evaluates the number of discs of the specified player's color.
+	 *
+	 * @param state The current game board state.
+	 * @param playerTurn The player whose utility is being calculated.
+	 * @return A heuristic score representing the utility of the node.
+	 */
+	private static int heuristicEvaluation(GameBoardState state, PlayerTurn playerTurn) {
+		BoardCellState playerColor = (playerTurn == PlayerTurn.PLAYER_ONE)
+				? BoardCellState.WHITE
+				: BoardCellState.BLACK;
+
+		BoardCellState opponentColor = (playerTurn == PlayerTurn.PLAYER_ONE)
+				? BoardCellState.BLACK
+				: BoardCellState.WHITE;
+
+		int playerDiscs = 0;
+		int opponentDiscs = 0;
+
+		// Count discs for both players
+		GameBoardCell[][] board = state.getGameBoard().getCells();
+		for (int row = 0; row < board.length; row++) {
+			for (int col = 0; col < board[row].length; col++) {
+				if (board[row][col].getCellState() == playerColor) {
+					playerDiscs++;
+				} else if (board[row][col].getCellState() == opponentColor) {
+					opponentDiscs++;
+				}
+			}
+		}
+
+		// Prioritize maximizing player's discs and minimizing opponent's discs
+		return playerDiscs - opponentDiscs;
+	}
+
+
+
+
+
 	/**
 	 * Example method which shows a greedy safe move finder algorithm: One step lookahead
 	 * @param currentState : The current state of the game
@@ -260,6 +455,7 @@ public class AgentController {
 			
 		//Retrieves and stores all moves for specified player given the current state of the game
 		List<ObjectiveWrapper> agentMoves = getAvailableMoves(currentState, turn);
+		System.out.println("Available moves: " + agentMoves.size());
 		
 		//Stores the moves the adversary of the specified player
 		List<ResultWrapper> adversaryMoves = new LinkedList<>();
@@ -508,7 +704,7 @@ public class AgentController {
 	 */
 	public static int getTerminalEvaluation(GameBoardState state){
 		GameBoardCell[][] grid = state.getGameBoard().getCells();
-		
+
 		int agentPieces = 0;
 		int humanPieces = 0;
 
@@ -521,9 +717,9 @@ public class AgentController {
 				}
 			}
 		}
-		
+
 		if((agentPieces + humanPieces) == (state.getBoardSize() * state.getBoardSize())){
-			
+
 			if(agentPieces > humanPieces){
 				return MAX_VALUE;
 			}else if(agentPieces < humanPieces){
@@ -534,7 +730,7 @@ public class AgentController {
 		}
 		return 0;
 	}
-	
+
 	public static double getDifferentiationHeuristic(GameBoardState state){
 
 		GameBoardCell[][] grid = state.getGameBoard().getCells();

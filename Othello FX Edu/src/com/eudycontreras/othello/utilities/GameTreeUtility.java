@@ -13,6 +13,8 @@ import com.eudycontreras.othello.threading.ThreadManager;
 import com.eudycontreras.othello.threading.ThreadManager.Script;
 import com.eudycontreras.othello.threading.ThreadManager.Task;
 
+import static com.eudycontreras.othello.controllers.AgentController.getAvailableMoves;
+
 /**
  * <H2>Created by</h2> Eudy Contreras
  * <h4> Mozilla Public License 2.0 </h4>
@@ -222,61 +224,61 @@ public class GameTreeUtility {
 		return cell.getCellState() == BoardCellState.BLACK || cell.getCellState() == BoardCellState.WHITE;
 	}
 
-	public static GameBoardState createChildState(GameBoardState root, GameBoardState currentState, ObjectiveWrapper move){
-		
+
+	public static boolean isTerminal(GameBoardState state, PlayerTurn player) {
+		if (state.getWhiteCount() == 0 || state.getBlackCount() == 0) return true;
+		if (state.getTotalCount() == state.getBoardSize() * state.getBoardSize()) return true;
+
+		List<ObjectiveWrapper> currentPlayerMoves = getAvailableMoves(state, player);
+		List<ObjectiveWrapper> opponentMoves = getAvailableMoves(state, getCounterPlayer(player));
+
+		return currentPlayerMoves.isEmpty() && opponentMoves.isEmpty();
+	}
+
+
+	public static GameBoardState createChildState(GameBoardState root, GameBoardState currentState, ObjectiveWrapper move) {
+		// Initialize new game state
 		GameBoardState state = GameBoardState.createBoardState(null, false, false);
-		
+
+		// Validate move
+		if (move == null || move.getObjectiveCell() == null) {
+			return null; // Return null if the move is invalid
+		}
+
+		// Copy board state
 		GameBoardCell[][] cells = new GameBoardCell[currentState.getBoardSize()][currentState.getBoardSize()];
-			
-		Index objectiveIndex = move.getObjectiveCell().getIndex();
+		int whiteCounter = 0, blackCounter = 0;
 
-		int whiteCounter = 0;
-		int blackCounter = 0;
-		
-		for(int row = 0; row<cells.length; row++){			
-			for(int col = 0; col<cells[row].length; col++){
-				cells[row][col] = new GameBoardCell(state.getGameBoard(), row, col, currentState.getGameBoard().getGameBoardCell(row,col).getCellState());			
+		for (int row = 0; row < cells.length; row++) {
+			for (int col = 0; col < cells[row].length; col++) {
+				cells[row][col] = new GameBoardCell(
+						state.getGameBoard(),
+						row,
+						col,
+						currentState.getGameBoard().getGameBoardCell(row, col).getCellState()
+				);
 
-				if(cells[row][col].getCellState() == BoardCellState.WHITE){
+				if (cells[row][col].getCellState() == BoardCellState.WHITE) {
 					whiteCounter++;
-				}else if(cells[row][col].getCellState() == BoardCellState.BLACK){
+				} else if (cells[row][col].getCellState() == BoardCellState.BLACK) {
 					blackCounter++;
 				}
 			}
 		}
-		
-		if(move.getCurrentCell().getCellState() == BoardCellState.WHITE){
-			whiteCounter += move.getPath().size();
-			blackCounter -= move.getPath().size();
-		}else{
-			whiteCounter -= move.getPath().size();
-			blackCounter += move.getPath().size();
-		}
-		
+
+		// Update counters and state
 		state.setWhiteCount(whiteCounter);
 		state.setBlackCount(blackCounter);
-		
 		state.setParentState(currentState);
 		state.setLeadingMove(move);
-		
 		state.setPlayerTurn(getCounterState(currentState.getPlayerTurn()));
 		state.setGameBoardCells(cells);
-		
-		state.getGameBoard().getGameBoardCell(objectiveIndex).setObjective(getStateBaseObjective(currentState.getPlayerTurn()), buildTrail(move));
 
-		state.getGameBoard().getGameBoardCell(objectiveIndex).setCellState(currentState.getPlayerTurn());
-		state.getGameBoard().getGameBoardCell(objectiveIndex).convertEnclosedCells();
-		
-		state.getGameBoard().resetBuildTrails(BoardCellState.ANY);
-	
-//		System.out.println("Current State: " + currentState.getPlayerTurn());
-//		
-//		printBoard(cells);
-	
 		return state;
 	}
-	
-	private static boolean timeLimitExceeded(long startingTime, int treeBuildTime) {
+
+
+	public static boolean timeLimitExceeded(long startingTime, int treeBuildTime) {
 
 		long now = System.currentTimeMillis();
 
