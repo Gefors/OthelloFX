@@ -69,7 +69,6 @@ public class AlphaBetaPruningAgent extends Agent{
                 System.currentTimeMillis(),
                 UserSettings.MIN_SEARCH_TIME
         );
-        System.out.println("Move: " + bestMove.getMoveReward());
         return bestMove;
 
     }

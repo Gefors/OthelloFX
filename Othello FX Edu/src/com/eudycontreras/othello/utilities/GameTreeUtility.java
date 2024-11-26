@@ -30,7 +30,7 @@ public class GameTreeUtility {
 
 	public static final int DEFAULT_BUILD_TIME = 2500;
 	
-	public static final int TREE_BUILD_DEPTH = 6;
+	public static final int TREE_BUILD_DEPTH = 15;
 		
 	public static final int TRAVERSAL_DEPTH = 8;
 	

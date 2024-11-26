@@ -285,28 +285,34 @@ public class AgentController {
 			long startingTime,
 			int timeLimit
 	) {
-		// Reset tracking variables
 		resetTracking();
 
-		// Start the Alpha-Beta search
-		MoveWrapper bestMove = alphaBetaRecursive(
-				currentState,
-				turn,
-				depth,
-				alpha,
-				beta,
-				isMaximizingPlayer,
-				startingTime,
-				timeLimit
-		);
+		MoveWrapper bestMove = null;
 
-		// Print tracking information after the search
+		// Iterative deepening with time check
+		for (int currentDepth = 1; currentDepth <= depth; currentDepth++) {
+			bestMove = alphaBetaRecursive(
+					currentState,
+					turn,
+					currentDepth,
+					alpha,
+					beta,
+					isMaximizingPlayer,
+					startingTime,
+					timeLimit
+			);
+
+			if (GameTreeUtility.timeLimitExceeded(startingTime, timeLimit)) {
+				break;
+			}
+		}
+
+		// Print the required information
 		System.out.println("Depths searched: " + depthsSearched);
 		System.out.println("Nodes examined: " + nodesExamined);
 
 		return bestMove;
 	}
-
 
 
 	private static MoveWrapper alphaBetaRecursive(
@@ -320,41 +326,47 @@ public class AgentController {
 			int timeLimit
 	) {
 		nodesExamined++;
-		depthsSearched = Math.max(depthsSearched, depth);
 
+		// Base case: stop when depth reaches 0 or time limit is exceeded
 		if (depth == 0 || GameTreeUtility.timeLimitExceeded(startingTime, timeLimit)) {
-			int heuristicScore = heuristicEvaluation(currentState, turn);
-			return new MoveWrapper(null, heuristicScore);
+			// Use getBestMove as a fallback heuristic if there are moves available
+			ObjectiveWrapper bestMove = getBestMove(currentState, turn);
+			int heuristicScore;
+
+			if (bestMove != null) {
+				heuristicScore = heuristicEvaluation(GameTreeUtility.createChildState(currentState, currentState, bestMove), turn);
+			} else {
+				heuristicScore = heuristicEvaluation(currentState, turn);
+			}
+			return new MoveWrapper(bestMove, heuristicScore);
 		}
+
 
 		List<ObjectiveWrapper> agentMoves = getAvailableMoves(currentState, turn);
-
 		if (agentMoves.isEmpty()) {
-			if (GameTreeUtility.isTerminal(currentState, turn)) {
-				int terminalScore = getTerminalEvaluation(currentState);
-				return new MoveWrapper(null, terminalScore);
-			}
-
-			return alphaBetaRecursive(
-					currentState,
-					GameTreeUtility.getCounterPlayer(turn),
-					depth - 1,
-					alpha,
-					beta,
-					!isMaximizingPlayer,
-					startingTime,
-					timeLimit
-			);
+			return new MoveWrapper(null, heuristicEvaluation(currentState, turn));
 		}
+
+		// Incorporate getBestMove to prioritize the strongest initial move
+		ObjectiveWrapper bestInitialMove = getBestMove(currentState, turn);
+		if (bestInitialMove != null) {
+			agentMoves.remove(bestInitialMove); // Avoid duplicates
+			agentMoves.add(0, bestInitialMove); // Add the best move to the front
+		}
+
+		// Sort remaining moves for better pruning
+		agentMoves.sort((move1, move2) -> {
+			GameBoardState state1 = GameTreeUtility.createChildState(currentState, currentState, move1);
+			GameBoardState state2 = GameTreeUtility.createChildState(currentState, currentState, move2);
+			return Integer.compare(heuristicEvaluation(state2, turn), heuristicEvaluation(state1, turn));
+		});
 
 		MoveWrapper bestMove = null;
 
 		if (isMaximizingPlayer) {
 			int maxEval = Integer.MIN_VALUE;
-
 			for (ObjectiveWrapper move : agentMoves) {
 				GameBoardState newState = GameTreeUtility.createChildState(currentState, currentState, move);
-
 				MoveWrapper evaluation = alphaBetaRecursive(
 						newState,
 						GameTreeUtility.getCounterPlayer(turn),
@@ -365,21 +377,17 @@ public class AgentController {
 						startingTime,
 						timeLimit
 				);
-
 				if (evaluation.getMoveReward() > maxEval) {
 					maxEval = evaluation.getMoveReward();
 					bestMove = new MoveWrapper(move, maxEval);
 				}
-
 				alpha = Math.max(alpha, maxEval);
-				if (beta <= alpha) break;
+				if (beta <= alpha) break; // Beta cut-off
 			}
 		} else {
 			int minEval = Integer.MAX_VALUE;
-
 			for (ObjectiveWrapper move : agentMoves) {
 				GameBoardState newState = GameTreeUtility.createChildState(currentState, currentState, move);
-
 				MoveWrapper evaluation = alphaBetaRecursive(
 						newState,
 						GameTreeUtility.getCounterPlayer(turn),
@@ -390,56 +398,56 @@ public class AgentController {
 						startingTime,
 						timeLimit
 				);
-
 				if (evaluation.getMoveReward() < minEval) {
 					minEval = evaluation.getMoveReward();
 					bestMove = new MoveWrapper(move, minEval);
 				}
-
 				beta = Math.min(beta, minEval);
-				if (beta <= alpha) break;
+				if (beta <= alpha) break; // Alpha cut-off
 			}
 		}
 
-		return bestMove != null ? bestMove : new MoveWrapper(null, Integer.MIN_VALUE);
+		depthsSearched = depth;
+		return bestMove;
 	}
 
 
-	/**
-	 * Heuristic evaluation function to estimate the utility of a non-leaf node.
-	 * This implementation evaluates the number of discs of the specified player's color.
-	 *
-	 * @param state The current game board state.
-	 * @param playerTurn The player whose utility is being calculated.
-	 * @return A heuristic score representing the utility of the node.
-	 */
+
+
 	private static int heuristicEvaluation(GameBoardState state, PlayerTurn playerTurn) {
-		BoardCellState playerColor = (playerTurn == PlayerTurn.PLAYER_ONE)
-				? BoardCellState.WHITE
-				: BoardCellState.BLACK;
+		int[][] weightMatrix = {
+				{ 50, -25, 10, 10, 10, 10, -25, 50 },
+				{ -25, -25,  5,  5,  5,  5, -25, -25 },
+				{  15,   5,  1,  1,  1,  1,   5,  15 },
+				{  15,   5,  1,  0,  0,  1,   5,  15 },
+				{  15,   5,  1,  0,  0,  1,   5,  15 },
+				{  15,   5,  1,  1,  1,  1,   5,  15 },
+				{ -25, -25,  5,  5,  5,  5, -25, -25 },
+				{ 50, -25, 15, 15, 15, 15, -25, 50 },
+		};
 
-		BoardCellState opponentColor = (playerTurn == PlayerTurn.PLAYER_ONE)
-				? BoardCellState.BLACK
-				: BoardCellState.WHITE;
-
-		int playerDiscs = 0;
-		int opponentDiscs = 0;
-
-		// Count discs for both players
+		int score = 0;
 		GameBoardCell[][] board = state.getGameBoard().getCells();
+		BoardCellState playerColor;
+
+		if (playerTurn == PlayerTurn.PLAYER_ONE) {
+			playerColor = BoardCellState.WHITE;
+		} else {
+			playerColor = BoardCellState.BLACK;
+		}
+
+
 		for (int row = 0; row < board.length; row++) {
 			for (int col = 0; col < board[row].length; col++) {
 				if (board[row][col].getCellState() == playerColor) {
-					playerDiscs++;
-				} else if (board[row][col].getCellState() == opponentColor) {
-					opponentDiscs++;
+					score += weightMatrix[row][col];
 				}
 			}
 		}
 
-		// Prioritize maximizing player's discs and minimizing opponent's discs
-		return playerDiscs - opponentDiscs;
+		return score;
 	}
+
 
 
 
