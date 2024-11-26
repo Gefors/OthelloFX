@@ -327,6 +327,10 @@ public class AgentController {
 	) {
 		nodesExamined++;
 
+		// Update depthsSearched to reflect the current depth being explored
+		depthsSearched = Math.max(depthsSearched, depth);
+
+
 		// Base case: stop when depth reaches 0 or time limit is exceeded
 		if (depth == 0 || GameTreeUtility.timeLimitExceeded(startingTime, timeLimit)) {
 			// Use getBestMove as a fallback heuristic if there are moves available
@@ -341,7 +345,6 @@ public class AgentController {
 			return new MoveWrapper(bestMove, heuristicScore);
 		}
 
-
 		List<ObjectiveWrapper> agentMoves = getAvailableMoves(currentState, turn);
 		if (agentMoves.isEmpty()) {
 			return new MoveWrapper(null, heuristicEvaluation(currentState, turn));
@@ -350,8 +353,8 @@ public class AgentController {
 		// Incorporate getBestMove to prioritize the strongest initial move
 		ObjectiveWrapper bestInitialMove = getBestMove(currentState, turn);
 		if (bestInitialMove != null) {
-			agentMoves.remove(bestInitialMove); // Avoid duplicates
-			agentMoves.add(0, bestInitialMove); // Add the best move to the front
+			agentMoves.remove(bestInitialMove);
+			agentMoves.add(0, bestInitialMove);
 		}
 
 		// Sort remaining moves for better pruning
@@ -382,7 +385,7 @@ public class AgentController {
 					bestMove = new MoveWrapper(move, maxEval);
 				}
 				alpha = Math.max(alpha, maxEval);
-				if (beta <= alpha) break; // Beta cut-off
+				if (beta <= alpha) break;
 			}
 		} else {
 			int minEval = Integer.MAX_VALUE;
@@ -403,53 +406,63 @@ public class AgentController {
 					bestMove = new MoveWrapper(move, minEval);
 				}
 				beta = Math.min(beta, minEval);
-				if (beta <= alpha) break; // Alpha cut-off
+				if (beta <= alpha) break;
 			}
 		}
 
-		depthsSearched = depth;
 		return bestMove;
 	}
 
 
 
-
 	private static int heuristicEvaluation(GameBoardState state, PlayerTurn playerTurn) {
+		BoardCellState playerColor;
+		BoardCellState opponentColor;
+
+		// Weight matrix emphasizing positional advantage
 		int[][] weightMatrix = {
-				{ 50, -25, 10, 10, 10, 10, -25, 50 },
+				{ 100, -25, 15, 15, 15, 15, -25, 100 },
 				{ -25, -25,  5,  5,  5,  5, -25, -25 },
 				{  15,   5,  1,  1,  1,  1,   5,  15 },
 				{  15,   5,  1,  0,  0,  1,   5,  15 },
 				{  15,   5,  1,  0,  0,  1,   5,  15 },
 				{  15,   5,  1,  1,  1,  1,   5,  15 },
 				{ -25, -25,  5,  5,  5,  5, -25, -25 },
-				{ 50, -25, 15, 15, 15, 15, -25, 50 },
+				{ 100, -25, 15, 15, 15, 15, -25, 100 },
 		};
 
-		int score = 0;
-		GameBoardCell[][] board = state.getGameBoard().getCells();
-		BoardCellState playerColor;
+		// Determine player and opponent colors
 
 		if (playerTurn == PlayerTurn.PLAYER_ONE) {
 			playerColor = BoardCellState.WHITE;
+			opponentColor = BoardCellState.BLACK;
 		} else {
 			playerColor = BoardCellState.BLACK;
+			opponentColor = BoardCellState.WHITE;
 		}
 
 
+		int score = 0;
+		GameBoardCell[][] board = state.getGameBoard().getCells();
+
+		// Calculate positional score for player and opponent
 		for (int row = 0; row < board.length; row++) {
 			for (int col = 0; col < board[row].length; col++) {
 				if (board[row][col].getCellState() == playerColor) {
 					score += weightMatrix[row][col];
+				} else if (board[row][col].getCellState() == opponentColor) {
+					score -= weightMatrix[row][col];
 				}
 			}
 		}
 
+		// Mobility score: difference in valid moves
+		int playerMoves = AgentController.getAvailableMoves(state, playerTurn).size();
+		int opponentMoves = AgentController.getAvailableMoves(state, GameTreeUtility.getCounterPlayer(playerTurn)).size();
+		score += (playerMoves - opponentMoves) * 10;
+
 		return score;
 	}
-
-
-
 
 
 
