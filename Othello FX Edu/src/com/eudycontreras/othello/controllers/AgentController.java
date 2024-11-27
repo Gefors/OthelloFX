@@ -289,25 +289,20 @@ public class AgentController {
 
 		MoveWrapper bestMove = null;
 
-		// Iterative deepening with time check
-		for (int currentDepth = 1; currentDepth <= depth; currentDepth++) {
-			bestMove = alphaBetaRecursive(
-					currentState,
-					turn,
-					currentDepth,
-					alpha,
-					beta,
-					isMaximizingPlayer,
-					startingTime,
-					timeLimit
-			);
 
-			if (GameTreeUtility.timeLimitExceeded(startingTime, timeLimit)) {
-				break;
-			}
-		}
+		bestMove = alphaBetaRecursive(
+				currentState,
+				turn,
+				depth,
+				alpha,
+				beta,
+				isMaximizingPlayer,
+				startingTime,
+				timeLimit,
+				depth
+		);
 
-		// Print the required information
+
 		System.out.println("Depths searched: " + depthsSearched);
 		System.out.println("Nodes examined: " + nodesExamined);
 
@@ -323,17 +318,17 @@ public class AgentController {
 			int beta,
 			boolean isMaximizingPlayer,
 			long startingTime,
-			int timeLimit
+			int timeLimit,
+			int initialDepth
 	) {
 		nodesExamined++;
 
-		// Update depthsSearched to reflect the current depth being explored
-		depthsSearched = Math.max(depthsSearched, depth);
+		int currentDepth = initialDepth - depth; // How deep are we in the tree?
+		depthsSearched = Math.max(depthsSearched, currentDepth);
 
 
-		// Base case: stop when depth reaches 0 or time limit is exceeded
+		// stop when depth reaches 0 or time limit is exceeded
 		if (depth == 0 || GameTreeUtility.timeLimitExceeded(startingTime, timeLimit)) {
-			// Use getBestMove as a fallback heuristic if there are moves available
 			ObjectiveWrapper bestMove = getBestMove(currentState, turn);
 			int heuristicScore;
 
@@ -350,7 +345,7 @@ public class AgentController {
 			return new MoveWrapper(null, heuristicEvaluation(currentState, turn));
 		}
 
-		// Incorporate getBestMove to prioritize the strongest initial move
+		// getBestMove to prioritize the strongest initial move
 		ObjectiveWrapper bestInitialMove = getBestMove(currentState, turn);
 		if (bestInitialMove != null) {
 			agentMoves.remove(bestInitialMove);
@@ -378,7 +373,8 @@ public class AgentController {
 						beta,
 						false,
 						startingTime,
-						timeLimit
+						timeLimit,
+						initialDepth
 				);
 				if (evaluation.getMoveReward() > maxEval) {
 					maxEval = evaluation.getMoveReward();
@@ -399,7 +395,8 @@ public class AgentController {
 						beta,
 						true,
 						startingTime,
-						timeLimit
+						timeLimit,
+						initialDepth
 				);
 				if (evaluation.getMoveReward() < minEval) {
 					minEval = evaluation.getMoveReward();
@@ -419,27 +416,25 @@ public class AgentController {
 		BoardCellState playerColor;
 		BoardCellState opponentColor;
 
-		// Weight matrix emphasizing positional advantage
+		// Weight matrix with positional advantage
 		int[][] weightMatrix = {
 				{ 100, -25, 15, 15, 15, 15, -25, 100 },
-				{ -25, -25,  5,  5,  5,  5, -25, -25 },
+				{ -25, -40,  5,  5,  5,  5, -40, -25 },
 				{  15,   5,  1,  1,  1,  1,   5,  15 },
 				{  15,   5,  1,  0,  0,  1,   5,  15 },
 				{  15,   5,  1,  0,  0,  1,   5,  15 },
 				{  15,   5,  1,  1,  1,  1,   5,  15 },
-				{ -25, -25,  5,  5,  5,  5, -25, -25 },
+				{ -25, -40,  5,  5,  5,  5, -40, -25 },
 				{ 100, -25, 15, 15, 15, 15, -25, 100 },
 		};
 
 		// Determine player and opponent colors
-
 		if (playerTurn == PlayerTurn.PLAYER_ONE) {
 			playerColor = BoardCellState.WHITE;
-			opponentColor = BoardCellState.BLACK;
 		} else {
 			playerColor = BoardCellState.BLACK;
-			opponentColor = BoardCellState.WHITE;
 		}
+		opponentColor = GameTreeUtility.getCounterState(playerColor);
 
 
 		int score = 0;
@@ -455,11 +450,6 @@ public class AgentController {
 				}
 			}
 		}
-
-		// Mobility score: difference in valid moves
-		int playerMoves = AgentController.getAvailableMoves(state, playerTurn).size();
-		int opponentMoves = AgentController.getAvailableMoves(state, GameTreeUtility.getCounterPlayer(playerTurn)).size();
-		score += (playerMoves - opponentMoves) * 10;
 
 		return score;
 	}

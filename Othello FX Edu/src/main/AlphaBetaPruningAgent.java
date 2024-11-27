@@ -53,12 +53,11 @@ public class AlphaBetaPruningAgent extends Agent{
     private AgentMove getAplhaBetaMove(GameBoardState gameState){
 
 
-        int depth = GameTreeUtility.TRAVERSAL_DEPTH; // Maximum depth for the Alpha-Beta search
+        int depth = GameTreeUtility.TRAVERSAL_DEPTH;
         int alpha = Integer.MIN_VALUE;
         int beta = Integer.MAX_VALUE;
         boolean isMaximizingPlayer = playerTurn == PlayerTurn.PLAYER_ONE;
 
-        // Return the selected move
         MoveWrapper bestMove = AgentController.findBestMoveAlphaBeta(
                 gameState,
                 playerTurn,
